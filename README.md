@@ -6,7 +6,7 @@
 
 VBA standard module for `For Each` loop support via `IEnumerator` interface — no typelib required.
 
-Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) in a standard module using `AddressOf` and a heap-allocated vtable. Items are retrieved one by one via the `IEnumerator` interface, which the iterable class must implement.
+Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) in a standard module using `AddressOf` and a heap-allocated vtable. Items are retrieved one by one via the `IEnumerator` interface, which the iterable Class must implement.
 
 ---
 
@@ -27,9 +27,9 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 
 | File | Type | Description |
 |---|---|---|
-| `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable class |
+| `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable Class |
 | `Enumerator.bas` | Module | `Enumerate(iterable)` — the main entry point |
-| `CEnumTestEarly.cls` | Example | Simple iterable class implementing `IEnumerator` |
+| `CEnumTestEarly.cls` | Example | Simple iterable Class implementing `IEnumerator` |
 | `EnumTestEarly.bas` | Example | `For Each` tests and performance timings |
 
 > **Note:** `EnumTest.bas` uses a `Stopwatch` module for timing measurements. Remove or replace those calls if you do not have it.
@@ -56,7 +56,7 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 
 ## 🚀 Quick Start
 
-**1. Implement `IEnumerator` in your class:**
+**1. Implement `IEnumerator` in your Class:**
 
 ```vb
 Implements IEnumerator
