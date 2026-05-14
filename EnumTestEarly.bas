@@ -30,8 +30,8 @@ Option Explicit
 
 Public Sub TestForEachEarlyBinding()
 
-    Dim EnumTest As EnumTestEarlyClass
-    Set EnumTest = New EnumTestEarlyClass
+    Dim EnumTest As CEnumTestEarly
+    Set EnumTest = New CEnumTestEarly
 
     EnumTest.count = 25
 
@@ -44,8 +44,8 @@ End Sub
 
 
 Private Sub TestForEachNestedEarlyBinding()
-    Dim EnumTest As EnumTestEarlyClass
-    Set EnumTest = New EnumTestEarlyClass
+    Dim EnumTest As CEnumTestEarly
+    Set EnumTest = New CEnumTestEarly
 
     EnumTest.count = 10
 
@@ -68,7 +68,7 @@ End Sub
 
 
 Private Sub TestTimerEarlyBinding()
-    Dim EnumTest As EnumTestEarlyClass
+    Dim EnumTest As CEnumTestEarly
     Dim v As Variant
 
     Dim n As Long: n = 10000
@@ -77,7 +77,7 @@ Private Sub TestTimerEarlyBinding()
     Dim i As Long
     Dim Seconds As Double
 
-    Set EnumTest = New EnumTestEarlyClass
+    Set EnumTest = New CEnumTestEarly
     EnumTest.count = n
 
     Stopwatch.Reset

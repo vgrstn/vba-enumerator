@@ -29,7 +29,7 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 |---|---|---|
 | `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable class |
 | `Enumerator.bas` | Module | `Enumerate(iterable)` — the main entry point |
-| `EnumTestEarlyClass.cls` | Example | Simple iterable class implementing `IEnumerator` |
+| `CEnumTestEarly.cls` | Example | Simple iterable class implementing `IEnumerator` |
 | `EnumTestEarly.bas` | Example | `For Each` tests and performance timings |
 
 > **Note:** `EnumTest.bas` uses a `Stopwatch` module for timing measurements. Remove or replace those calls if you do not have it.
