@@ -421,7 +421,7 @@ Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr)
 End Function
 
 
-'@Description "Returns True if if is IID_IUnknown GUID."
+'@Description "Returns True if id is IID_IUnknown GUID."
 Private Function IsIID_IUnknown(ByRef id As GUID) As Boolean
 
 '    Const IID_IUnknown As String = "{00000000-0000-0000-C000-000000000046}"
@@ -441,7 +441,7 @@ Private Function IsIID_IUnknown(ByRef id As GUID) As Boolean
 End Function
 
 
-'@Description "Returns True if if is IID_IEnumVARIANT GUID."
+'@Description "Returns True if id is IID_IEnumVARIANT GUID."
 Private Function IsIID_IEnumVARIANT(ByRef id As GUID) As Boolean
 
 '    Const IID_IEnumVARIANT As String = "{00020404-0000-0000-C000-000000000046}"
