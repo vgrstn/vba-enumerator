@@ -1,4 +1,4 @@
-Attribute VB_Name = "EnumTest"
+Attribute VB_Name = "EnumTestEarly"
 '@Folder("Module")
 '@ModuleDescription("Enumerator Test.")
 
