@@ -110,11 +110,11 @@ Timings for `n = 10,000` items (Immediate Window):
 
 | Method | Time (ms) |
 |---|---|
-| Custom enumerator — `For Each` (VarByRef) | 2.69 |
-| Custom enumerator — `For Each` (API) | 15.0 |
-| VB Collection — `For Each` | 0.21 |
-| VB Array — `For Each` | 0.14 |
-| VB Array — `For i` | 0.08 |
+| Custom enumerator — `For Each` (VarByRef) | 2.89 |
+| Custom enumerator — `For Each` (API) | 16.38 |
+| VB Collection — `For Each` | 0.24 |
+| VB Array — `For Each` | 0.13 |
+| VB Array — `For i` | 0.07 |
 
 The overhead versus a native VB Collection is primarily the early-bound `IEnumerator.Item(i)` call per element. The VarByRef variant copy is ~5× faster than the `VariantCopy` API.
 
@@ -253,11 +253,10 @@ Case celt <= (obj.Step * (obj.Last - obj.Current) + 1)
 
 ```vb
 Dim Copy As TENUM: Copy = obj      ' UDT copy — VBA AddRefs IEnum
-Set Copy.IEnum = obj.IEnum         ' second tracked reference for KeepAlive
 Copy.nRef = 1
 ```
 
-`Copy = obj` copies all fields including the raw `IEnum` pointer; VBA automatically calls `AddRef` on the embedded object member during the UDT copy. `Set Copy.IEnum = obj.IEnum` adds a second reference — this is the one `KeepAlive` will manage for the clone. When `Copy` goes out of scope, VBA releases the first reference; `KeepAlive` holds the second. The clone starts at `nRef = 1` regardless of the original's count, and captures the enumeration position at the moment of cloning.
+`Copy = obj` copies all fields including the raw `IEnum` pointer; VBA automatically calls `AddRef` on the embedded object member during the UDT assignment, so `KeepAlive` has exactly the one tracked reference it needs for the clone. The clone starts at `nRef = 1` regardless of the original's count, and captures the enumeration position at the moment of cloning.
 
 ### GUID comparison — field-by-field
 
