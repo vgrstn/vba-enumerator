@@ -1,4 +1,5 @@
 Attribute VB_Name = "EnumeratorLateBinding"
+Attribute VB_Description = "Enumerator Module."
 
 '------------------------------------------------------------------------------
 ' MIT License
@@ -274,6 +275,7 @@ Private Function IUnknown_QueryInterface( _
     ByRef riid As GUID, _
     ByVal ppvObj As LongPtr _
 ) As Long
+Attribute IUnknown_QueryInterface.VB_Description = "Queries a COM object for a pointer to one of its interfaces."
 
     If ppvObj = vbNullPtr Then
         IUnknown_QueryInterface = E_POINTER
@@ -292,6 +294,7 @@ End Function
 
 
 Private Function IUnknown_AddRef(ByRef obj As TENUM) As Long
+Attribute IUnknown_AddRef.VB_Description = "Increments the reference count for an interface pointer to a COM object."
 
     obj.nRef = obj.nRef + 1
     IUnknown_AddRef = obj.nRef
@@ -300,6 +303,7 @@ End Function
 
 
 Private Function IUnknown_Release(ByRef obj As TENUM) As Long
+Attribute IUnknown_Release.VB_Description = "Decrements the reference count for an interface pointer to a COM object."
 
     obj.nRef = obj.nRef - 1
     IUnknown_Release = obj.nRef
@@ -319,6 +323,7 @@ Private Function IEnumVARIANT_Next( _
     ByVal rgVar As LongPtr, _
     ByVal pceltFetched As LongPtr _
 ) As Long
+Attribute IEnumVARIANT_Next.VB_Description = "Retrieves the next item in the enumeration sequence."
 
     If rgVar = vbNullPtr Then
         IEnumVARIANT_Next = E_INVALIDARG
@@ -371,6 +376,7 @@ End Function
 
 
 Private Function IEnumVARIANT_Skip(ByRef obj As TENUM, ByVal celt As Long) As Long
+Attribute IEnumVARIANT_Skip.VB_Description = "Skips over a number of elements in the enumeration sequence."
 
     Select Case True
     Case celt = 0:  IEnumVARIANT_Skip = S_OK
@@ -387,6 +393,7 @@ End Function
 
 
 Private Function IEnumVARIANT_Reset(ByRef obj As TENUM) As Long
+Attribute IEnumVARIANT_Reset.VB_Description = "Resets the enumeration sequence to the beginning."
 
     obj.Current = obj.First
     IEnumVARIANT_Reset = S_OK
@@ -395,6 +402,7 @@ End Function
 
 
 Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr) As Long
+Attribute IEnumVARIANT_Clone.VB_Description = "Creates a copy of the current state of enumeration."
 
     If ppEnum = vbNullPtr Then
         IEnumVARIANT_Clone = E_INVALIDARG
@@ -424,6 +432,7 @@ End Function
 
 
 Private Function IsIID_IUnknown(ByRef id As GUID) As Boolean
+Attribute IsIID_IUnknown.VB_Description = "Returns True if id is IID_IUnknown GUID."
 
 '    Const IID_IUnknown As String = "{00000000-0000-0000-C000-000000000046}"
     IsIID_IUnknown = _
@@ -443,6 +452,7 @@ End Function
 
 
 Private Function IsIID_IEnumVARIANT(ByRef id As GUID) As Boolean
+Attribute IsIID_IEnumVARIANT.VB_Description = "Returns True if id is IID_IEnumVARIANT GUID."
 
 '    Const IID_IEnumVARIANT As String = "{00020404-0000-0000-C000-000000000046}"
     IsIID_IEnumVARIANT = _
@@ -462,6 +472,7 @@ End Function
 
 
 Private Property Set KeepAlive(ByVal block As LongPtr, ByVal RHS As Object)
+Attribute KeepAlive.VB_Description = "Keep alive the iterable object stored in heap memory."
 ' Increase or decrease reference count for the iterable object.
 
     Static Table As Collection
@@ -489,6 +500,7 @@ End Property
 
 #If API = False Then
 Private Sub InitializeVarByRef()
+Attribute InitializeVarByRef.VB_Description = "Initializes the Variant ByRef construct."
 
     VarByRef.vt = VarPtr(VarByRef.ref)
     CopyMemory VarByRef.vt, VBA.vbInteger Or VT_BYREF, vbSizeInteger
@@ -504,6 +516,7 @@ Private Sub CopyVarByRef( _
     ByRef vt As Variant, _
     ByRef ref As Variant _
 )
+Attribute CopyVarByRef.VB_Description = "Copies a Variant to a memory address using the Variant ByRef construct."
 
     VarByRef.ref = address
     vt = VBA.vbVariant Or VT_BYREF
@@ -524,6 +537,7 @@ Private Sub CopyLngByRef( _
     ByRef vt As Variant, _
     ByRef ref As Variant _
 )
+Attribute CopyLngByRef.VB_Description = "Copies a Long to a memory address using the Variant ByRef construct."
 
     VarByRef.ref = address
     vt = VBA.vbLong Or VT_BYREF
@@ -538,6 +552,7 @@ Private Function PeekStr( _
     ByVal address As LongPtr, _
     ByRef vt As Variant _
 ) As String
+Attribute PeekStr.VB_Description = "Peeks an address for a String using the Variant ByRef construct."
 
     VarByRef.ref = VarPtr(address)
     vt = VBA.vbString Or VT_BYREF
