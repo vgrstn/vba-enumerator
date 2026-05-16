@@ -157,6 +157,8 @@ Private Enum HRESULT
     E_NOTIMPL = &H80004001              ' Not implemented
     E_NOINTERFACE = &H80004002          ' No such interface supported
     E_POINTER = &H80004003              ' Pointer that is not valid
+    E_ABORT = &H80004004                ' Operation aborted
+    E_FAIL = &H80004005                 ' Unspecified failure
     E_OUTOFMEMORY = &H8007000E          ' Failed to allocate necessary memory
     E_INVALIDARG = &H80070057           ' One of the arguments is not valid
 End Enum
