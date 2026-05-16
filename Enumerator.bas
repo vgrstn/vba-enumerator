@@ -381,7 +381,7 @@ Private Function IEnumVARIANT_Skip(ByRef obj As TENUM, ByVal celt As Long) As Lo
         IEnumVARIANT_Skip = S_OK
     Case Else
         ' For overshoot set one-past-end.
-        obj.Current = obj.Last + obj.Step
+        obj.Current = obj.Last + VBA.Sgn(obj.Step)
         IEnumVARIANT_Skip = S_FALSE
     End Select
 
@@ -405,7 +405,8 @@ Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr)
         Exit Function
     End If
 
-    Dim Copy As TENUM: Copy = obj   ' UDT assignment AddRefs IEnum — no Set needed
+    ' UDT assignment AddRefs IEnum — no Set needed
+    Dim Copy As TENUM: Copy = obj
     Copy.nRef = 1
 
     Dim MemoryBlock As LongPtr: MemoryBlock = CoTaskMemAlloc(LenB(obj))
