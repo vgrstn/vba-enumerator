@@ -372,18 +372,16 @@ End Function
 
 Private Function IEnumVARIANT_Skip(ByRef obj As TENUM, ByVal celt As Long) As Long
 
-    If celt < 0 Then
-        IEnumVARIANT_Skip = E_INVALIDARG
-        Exit Function
-    End If
-
-    obj.Current = obj.Current + celt
-    If obj.Current <= obj.Last Then
+    Select Case True
+    Case celt = 0:  IEnumVARIANT_Skip = S_OK
+    Case celt < 0:  IEnumVARIANT_Skip = E_INVALIDARG
+    Case celt <= obj.Last - obj.Current + 1
+        obj.Current = obj.Current + celt
         IEnumVARIANT_Skip = S_OK
-    Else
+    Case Else
         obj.Current = obj.Last + 1
         IEnumVARIANT_Skip = S_FALSE
-    End If
+    End Select
 
 End Function
 
