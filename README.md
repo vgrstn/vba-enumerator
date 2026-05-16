@@ -4,19 +4,20 @@
 ![Architecture](https://img.shields.io/badge/Architecture-x86%20%7C%20x64-lightgrey)
 ![Rubberduck](https://img.shields.io/badge/Rubberduck-Ready-orange)
 
-VBA standard module for IEnumVARIANT interface implementation — no typelib required early binding.
+VBA standard modules for `IEnumVARIANT` interface implementation — no typelib required.
 
-Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) in a standard module using `AddressOf` and a heap-allocated vtable. Items are retrieved one by one via the `IEnumerator` interface, which the iterable Class must implement.
+Two variants are provided: **early binding** (via `IEnumerator` interface, fastest) and **late binding** (via `VBA.CallByName`, no interface needed). Both implement the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) using `AddressOf` and a heap-allocated vtable.
 
 ---
 
 ## 📦 Features
 
 - **`For Each` without a typelib** — pure VBA, no external dependencies
-- **Early binding** — items are retrieved via `IEnumerator.Item(index)`, avoiding the overhead of late-bound dispatch
+- **Early binding** — items retrieved via `IEnumerator.Item(index)`, direct vtable call, no dispatch overhead
+- **Late binding** — items retrieved via `VBA.CallByName`, no interface needed in the iterable Class
 - **Nested loops** — works correctly for nested `For Each` with mixed objects and mixed enumerators
-- **Ascending and descending** — `First` and `Last` can be in either order
-- **Fast variant copy** — uses a Variant ByRef construct (5× faster than `VariantCopy` API); switch to API mode with `#Const API = True`
+- **Ascending and descending** — `First` and `Last` can be in either order (early binding)
+- **Fast variant copy** — uses a Variant ByRef construct (~5× faster than `VariantCopy` API); switch to API mode with `#Const API = True`
 - **Full COM lifecycle** — `QueryInterface`, `AddRef`, `Release`, `Clone` all correctly implemented
 - x86 / x64 compatible via `LongPtr` and `#If Win64`
 - Pure VBA, zero dependencies, Rubberduck-friendly annotations
@@ -27,8 +28,9 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 
 | File | Type | Description |
 |---|---|---|
-| `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable Class |
-| `Enumerator.bas` | Module | `Enumerate(iterable)` — the main entry point |
+| `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable Class (early binding only) |
+| `Enumerator.bas` | Module | `Enumerate(iterable)` — early-binding entry point |
+| `EnumeratorLateBinding.bas` | Module | `Enumerate(iterable, callback, count [, base])` — late-binding entry point |
 | `CEnumTestEarly.cls` | Example | Simple iterable Class implementing `IEnumerator` |
 | `EnumTestEarly.bas` | Example | `For Each` tests and performance timings |
 
@@ -40,7 +42,7 @@ Each file has a corresponding `_WithAttributes` version (e.g. `Enumerator_WithAt
 
 ## ⚙️ Public Interface
 
-### `Enumerator` module
+### `Enumerator` module (early binding)
 
 | Member | Description |
 |---|---|
@@ -54,9 +56,17 @@ Each file has a corresponding `_WithAttributes` version (e.g. `Enumerator_WithAt
 | `Last()` | Returns the index of the last item |
 | `Item(index)` | Returns the item at the given index |
 
+### `EnumeratorLateBinding` module (late binding)
+
+| Member | Description |
+|---|---|
+| `Enumerate(iterable, callback, count [, base])` | Returns a synthetic `IEnumVARIANT` for the iterable object. `callback` is the name of the property or method that accepts an index and returns the item. `count` is the number of items. `base` is the index of the first item (default `1`). Raises an error if `iterable` is `Nothing` or `callback` is not callable on `iterable`. |
+
 ---
 
 ## 🚀 Quick Start
+
+### Early binding
 
 **1. Implement `IEnumerator` in your Class:**
 
@@ -89,7 +99,26 @@ Public Function Enumerate() As IEnumVARIANT
 End Function
 ```
 
-**3. Use `For Each`:**
+### Late binding
+
+No interface needed — expose any indexed property or method and pass its name as `callback`:
+
+```vb
+Public Property Get Item(ByVal index As Long) As Variant
+    If VBA.IsObject(this.Items(index)) Then
+        Set Item = this.Items(index)
+    Else
+        Item = this.Items(index)
+    End If
+End Property
+
+'@Enumerator
+Public Function Enumerate() As IEnumVARIANT
+    Set Enumerate = EnumeratorLateBinding.Enumerate(Me, "Item", this.Count)
+End Function
+```
+
+### Using `For Each`
 
 ```vb
 Dim obj As MyClass
@@ -110,17 +139,21 @@ Timings for `n = 10,000` items (Immediate Window):
 
 | Method | Time (ms) |
 |---|---|
-| Custom enumerator — `For Each` (VarByRef) | 2.89 |
-| Custom enumerator — `For Each` (API) | 16.38 |
+| Custom enumerator — early binding, `For Each` (VarByRef) | 2.89 |
+| Custom enumerator — early binding, `For Each` (API) | 16.38 |
+| Custom enumerator — late binding, `For Each` (VarByRef) | 19.58 |
+| Custom enumerator — late binding, `For Each` (API) | 47.23 |
 | VB Collection — `For Each` | 0.24 |
 | VB Array — `For Each` | 0.13 |
 | VB Array — `For i` | 0.07 |
 
-The overhead versus a native VB Collection is primarily the early-bound `IEnumerator.Item(i)` call per element. The VarByRef variant copy is ~5× faster than the `VariantCopy` API.
+The dominant cost in the early-binding hot path is the `IEnumerator.Item(i)` vtable call per element. The late-binding overhead is `VBA.CallByName` dispatch on top of that, making it roughly 7× slower than early binding. The VarByRef variant copy is ~5× faster than the `VariantCopy` API in both variants.
 
 ---
 
 ## ⚙️ Compiler directive
+
+Applies to both `Enumerator.bas` and `EnumeratorLateBinding.bas`:
 
 | Directive | Default | Description |
 |---|---|---|
@@ -132,13 +165,15 @@ The overhead versus a native VB Collection is primarily the early-bound `IEnumer
 
 ## 🧠 How it works
 
-VBA's `For Each` requires the iterable object to expose `IEnumVARIANT` via `_NewEnum`. Rather than using a typelib to define `IEnumVARIANT`, this module:
+VBA's `For Each` requires the iterable object to expose `IEnumVARIANT` via `_NewEnum`. Rather than using a typelib to define `IEnumVARIANT`, these modules:
 
-1. Allocates a block of heap memory (`CoTaskMemAlloc`) large enough to hold the enumerator state (`TENUM` UDT)
-2. Builds a vtable of function pointers (`AddressOf`) for the seven COM methods: `QueryInterface`, `AddRef`, `Release`, `Next`, `Skip`, `Reset`, `Clone`
-3. Writes the vtable pointer into the first field of `TENUM` — making it a valid COM object
-4. Overwrites the return value of `Enumerate` with the heap pointer — returning the synthetic object as `IEnumVARIANT`
-5. Keeps the iterable object alive via a `Static Collection` keyed by the heap address, compensating for reference count changes when the local `TENUM` goes out of scope
+1. Allocate a block of heap memory (`CoTaskMemAlloc`) large enough to hold the enumerator state (`TENUM` UDT)
+2. Build a vtable of function pointers (`AddressOf`) for the seven COM methods: `QueryInterface`, `AddRef`, `Release`, `Next`, `Skip`, `Reset`, `Clone`
+3. Write the vtable pointer into the first field of `TENUM` — making it a valid COM object
+4. Overwrite the return value of `Enumerate` with the heap pointer — returning the synthetic object as `IEnumVARIANT`
+5. Keep the iterable object alive via a `Static Collection` keyed by the heap address, compensating for reference count changes when the local `TENUM` goes out of scope
+
+The early-binding module stores an `IEnumerator` reference in `TENUM`; the compiler emits direct vtable calls to `.Item(i)`. The late-binding module stores the iterable as `Object` and the property name as a BSTR (`LongPtr`); each item is retrieved via `VBA.CallByName`.
 
 Based on work by Dexter Freivald (32-bit, late binding) and ideas from *Hardcore Visual Basic 5.0* by Bruce McKinney.
 
@@ -148,6 +183,7 @@ Based on work by Dexter Freivald (32-bit, late binding) and ideas from *Hardcore
 
 ### `TENUM` — synthetic COM object layout
 
+**Early binding:**
 ```vb
 Private Type TENUM
     pvTable  As LongPtr     ' MUST be first — COM reads vtable pointer at offset 0
@@ -160,7 +196,20 @@ Private Type TENUM
 End Type
 ```
 
-`pvTable` is the first field because COM requires a pointer to the vtable at offset 0 of any COM object. `IEnum As IEnumerator` is early-bound — the compiler emits a direct vtable call to `.Item(i)` rather than a late-bound `IDispatch.Invoke`, which is the dominant cost in `IEnumVARIANT_Next`. `Step` is derived from `First`/`Last` at construction time; ascending and descending enumeration share the same code paths throughout.
+**Late binding:**
+```vb
+Private Type TENUM
+    pvTable  As LongPtr     ' MUST be first — COM reads vtable pointer at offset 0
+    caller   As Object      ' late-bound reference to the iterable object
+    callback As LongPtr     ' BSTR holding the property/method name
+    nRef     As Long        ' COM reference count
+    First    As Long        ' index of first item
+    Last     As Long        ' index of last item
+    Current  As Long        ' index of current position
+End Type
+```
+
+`pvTable` is the first field because COM requires a pointer to the vtable at offset 0 of any COM object. The early-binding `IEnum As IEnumerator` is early-bound — the compiler emits a direct vtable call to `.Item(i)`. The late-binding `caller As Object` + `callback As LongPtr` (BSTR) are used together in `VBA.CallByName` on the hot path.
 
 ### vtable — built once per session
 
@@ -185,12 +234,13 @@ CopyMemory ByVal VarPtr(Enumerate), MemoryBlock, vbSizeLongPtr
 
 ### `KeepAlive` — reference count management
 
-`CopyMemory ByVal MemoryBlock, obj, LenB(obj)` copies the `TENUM` struct to the heap as raw bytes — it copies the `IEnum` pointer without calling `AddRef`. When `obj` goes out of scope at function exit, VBA calls `Release` on `obj.IEnum`, which could destroy the iterable even though the heap block still holds a raw (untracked) copy of the pointer.
+`CopyMemory ByVal MemoryBlock, obj, LenB(obj)` copies the `TENUM` struct to the heap as raw bytes — it copies the object pointer without calling `AddRef`. When `obj` goes out of scope at function exit, VBA calls `Release` on the embedded object member, which could destroy the iterable even though the heap block still holds a raw (untracked) copy of the pointer.
 
 `KeepAlive` compensates:
 
 ```vb
-Set KeepAlive(MemoryBlock) = obj.IEnum   ' hold one tracked reference
+Set KeepAlive(MemoryBlock) = obj.IEnum   ' (early) hold one tracked reference
+Set KeepAlive(MemoryBlock) = obj.caller  ' (late)  hold one tracked reference
 ```
 
 A `Static Collection` inside the property holds the reference, keyed by the heap block address. When `IUnknown_Release` sees `nRef = 0`, it removes the entry and frees the block:
@@ -200,10 +250,31 @@ Set KeepAlive(VarPtr(obj)) = Nothing   ' release — iterable may now be destroy
 CoTaskMemFree VarPtr(obj)              ' free heap block
 ```
 
-The same pattern applies in `IEnumVARIANT_Clone`: the cloned enumerator's `IEnum` reference is also registered.
+The same pattern applies in `IEnumVARIANT_Clone`.
+
+### BSTR lifecycle (late binding)
+
+`callback As LongPtr` holds a BSTR — a pointer to the property name string allocated by `SysAllocString`. Unlike `Object` fields, `LongPtr` fields are not managed by VBA; the BSTR must be allocated and freed manually.
+
+- **`Enumerate`**: `SysAllocString(StrPtr(callback))` on success; `SysFreeString` before any `Err.Raise` or `CoTaskMemAlloc` failure
+- **`IUnknown_Release`**: `SysFreeString obj.callback` before `CoTaskMemFree`
+- **`IEnumVARIANT_Clone`**: `Copy = obj` copies the `LongPtr` as raw bytes (no `SysAllocString` called); must immediately follow with `Copy.callback = SysAllocString(obj.callback)` to give the clone its own BSTR; `SysFreeString Copy.callback` on `CoTaskMemAlloc` failure
+
+### `PeekStr` — BSTR read without allocation
+
+```vb
+Private Function PeekStr(ByVal address As LongPtr, ByRef vt As Variant) As String
+    VarByRef.ref = VarPtr(address)
+    vt = VBA.vbString Or VT_BYREF
+    PeekStr = VarByRef.ref
+End Function
+```
+
+Reads the BSTR at `address` as a VBA `String` via the Variant ByRef construct, without calling `SysAllocString`. Called on every `IEnumVARIANT_Next` iteration to obtain the `ProcName` string for `CallByName`, avoiding a heap allocation per loop.
 
 ### `IEnumVARIANT_Next` — hot path
 
+**Early binding:**
 ```vb
 For i = obj.Current To obj.Last Step obj.Step
     CopyVarByRef rgVar, obj.IEnum.Item(i), VarByRef.vt, VarByRef.ref
@@ -214,49 +285,54 @@ Next
 obj.Current = obj.Current + NumberFetched * obj.Step
 ```
 
-Per iteration: one early-bound `.Item(i)` call and one Variant copy to the destination address. `rgVar` is advanced by `vbSizeVariant` (16 bytes x86 / 24 bytes x64) for multi-element fetches; VBA's `For Each` always requests one item at a time (`celt = 1`), so the inner `Exit For` fires immediately and `rgVar` is never advanced. `obj.Current` is updated in one step after the loop. `pceltFetched` is written only when the caller provides a non-null pointer — the COM spec allows `NULL` when `celt = 1`.
-
-### Variant ByRef construct
-
+**Late binding:**
 ```vb
-Private Type CONSTRUCT
-    vt  As Variant
-    ref As Variant
-End Type
-Private VarByRef As CONSTRUCT
+For i = obj.Current To obj.Last
+    ProcName = PeekStr(obj.callback, VarByRef.vt)
+    CopyVarByRef rgVar, VBA.CallByName(obj.caller, ProcName, VBA.VbGet, i), VarByRef.vt, VarByRef.ref
+    NumberFetched = NumberFetched + 1
+    If NumberFetched = celt Then Exit For
+    rgVar = rgVar + vbSizeVariant
+Next
+obj.Current = obj.Current + NumberFetched
 ```
 
-`InitializeVarByRef` sets `vt` to `VT_INTEGER | VT_BYREF` pointing to `ref`. After this, `CopyVarByRef` writes a Variant to any address without an API call:
+Per iteration: one item fetch and one Variant copy to the destination address. `rgVar` is advanced by `vbSizeVariant` (16 bytes x86 / 24 bytes x64) for multi-element fetches; VBA's `For Each` always requests one item at a time (`celt = 1`), so the inner `Exit For` fires immediately. `obj.Current` is updated in one step after the loop.
 
-```vb
-VarByRef.ref = address        ' point vt at the target address
-vt = VBA.vbVariant Or VT_BYREF
-If VBA.IsObject(value) Then
-    Set ref = value           ' VBA writes the object Variant to address
-Else
-    ref = value               ' VBA writes the value Variant to address
-End If
-```
+### `IEnumVARIANT_Skip` — direction-aware (early) / ascending (late)
 
-VBA performs the Variant copy through the pointer without knowing it is writing to unmanaged memory. `CopyLngByRef` uses the same mechanism (`vbLong | VT_BYREF`) to write a `Long` to a target address — used for updating `pceltFetched`. Both helpers receive `vt` and `ref` as `ByRef Variant` parameters rather than accessing `VarByRef` directly, avoiding a global UDT indirection per call.
-
-### `IEnumVARIANT_Skip` — direction-aware
-
+**Early binding** — `Select Case True`, handles ascending and descending:
 ```vb
 Case celt <= (obj.Step * (obj.Last - obj.Current) + 1)
     obj.Current = obj.Current + celt * obj.Step
 ```
 
-`obj.Step * (obj.Last - obj.Current) + 1` gives the remaining item count for both ascending (`Step = 1`) and descending (`Step = -1`) without a branch. For overshoot, `obj.Current = obj.Last + obj.Step` places current one step past the end — the same post-exhaustion state that `Next` leaves after the sequence is consumed.
+`obj.Step * (obj.Last - obj.Current) + 1` gives the remaining item count for both ascending (`Step = 1`) and descending (`Step = -1`) without a branch. For overshoot, `obj.Current = obj.Last + VBA.Sgn(obj.Step)` places current one step past the end.
+
+**Late binding** — `Select Case True`, ascending only:
+```vb
+Case celt <= obj.Last - obj.Current + 1
+    obj.Current = obj.Current + celt
+```
+
+Both modules check `celt = 0` first (no-op fast path) and `celt < 0` second (invalid). `obj.Current` is only modified after the bounds check, so state is never corrupted on an invalid call.
 
 ### `IEnumVARIANT_Clone` — state snapshot
 
+**Early binding:**
 ```vb
 Dim Copy As TENUM: Copy = obj      ' UDT copy — VBA AddRefs IEnum
 Copy.nRef = 1
 ```
 
-`Copy = obj` copies all fields including the raw `IEnum` pointer; VBA automatically calls `AddRef` on the embedded object member during the UDT assignment, so `KeepAlive` has exactly the one tracked reference it needs for the clone. The clone starts at `nRef = 1` regardless of the original's count, and captures the enumeration position at the moment of cloning.
+**Late binding:**
+```vb
+Dim Copy As TENUM: Copy = obj      ' UDT copy — VBA AddRefs caller; callback is raw LongPtr
+Copy.callback = SysAllocString(obj.callback)
+Copy.nRef = 1
+```
+
+`Copy = obj` copies all fields. For the early-binding `IEnum As IEnumerator`, VBA automatically calls `AddRef` during UDT assignment. For the late-binding `callback As LongPtr`, no automatic BSTR duplication occurs — `SysAllocString` must be called explicitly. The clone captures the enumeration position at the moment of cloning and starts at `nRef = 1` regardless of the original's count.
 
 ### GUID comparison — field-by-field
 
@@ -280,6 +356,30 @@ IsIID_IUnknown = (id.Data1 = &H0) And (id.Data2 = &H0) And ... And (id.Data4(7) 
 ```
 
 A `Variant` is 16 bytes on x86 and 24 bytes on x64 due to pointer-size alignment in the data union. All `CopyMemory` sizes and pointer arithmetic use these constants — no hard-coded values appear in the code.
+
+### Variant ByRef construct
+
+```vb
+Private Type CONSTRUCT
+    vt  As Variant
+    ref As Variant
+End Type
+Private VarByRef As CONSTRUCT
+```
+
+`InitializeVarByRef` sets `vt` to `VT_INTEGER | VT_BYREF` pointing to `ref`. After this, `CopyVarByRef` writes a Variant to any address without an API call:
+
+```vb
+VarByRef.ref = address        ' point vt at the target address
+vt = VBA.vbVariant Or VT_BYREF
+If VBA.IsObject(value) Then
+    Set ref = value           ' VBA writes the object Variant to address
+Else
+    ref = value               ' VBA writes the value Variant to address
+End If
+```
+
+VBA performs the Variant copy through the pointer without knowing it is writing to unmanaged memory. `CopyLngByRef` uses the same mechanism (`vbLong | VT_BYREF`) to write a `Long` to a target address — used for updating `pceltFetched`. `PeekStr` uses `vbString | VT_BYREF` to read a BSTR without allocating. All three helpers receive `vt` and `ref` as `ByRef Variant` parameters rather than accessing `VarByRef` directly, avoiding a global UDT indirection per call.
 
 ---
 
