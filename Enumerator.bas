@@ -405,7 +405,7 @@ Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr)
         Exit Function
     End If
 
-    Dim Copy As TENUM: Copy = obj
+    Dim Copy As TENUM: Copy = obj   ' UDT assignment AddRefs IEnum — no Set needed
     Copy.nRef = 1
 
     Dim MemoryBlock As LongPtr: MemoryBlock = CoTaskMemAlloc(LenB(obj))

@@ -219,6 +219,7 @@ Public Function Enumerate(ByVal iterable As Object) As IEnumVARIANT
     Dim obj As TENUM
     With obj
         .pvTable = VarPtr(vTable(0))
+        ' Check if the IEnumerator interface is defined for the iterable object.
         If TypeOf iterable Is IEnumerator Then
             Set .IEnum = iterable
             .First = .IEnum.First
