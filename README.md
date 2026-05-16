@@ -32,7 +32,7 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 | `CEnumTestEarly.cls` | Example | Simple iterable Class implementing `IEnumerator` |
 | `EnumTestEarly.bas` | Example | `For Each` tests and performance timings |
 
-> **Note:** `EnumTest.bas` uses a `Stopwatch` module for timing measurements. Remove or replace those calls if you do not have it.
+> **Note:** `EnumTestEarly.bas` uses a `Stopwatch` module for timing measurements. Remove or replace those calls if you do not have it.
 
 ---
 
