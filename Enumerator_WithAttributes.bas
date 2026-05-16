@@ -58,10 +58,10 @@ Option Explicit
 ' End Function
 '
 ' Timings (ms) for n = 10.000
-' Iterable object with IEnumerator interface (For Each)     2.69 (API 15 ms)
-' VB Collection - VB enumerator (For Each)                  0.21
-' VB Array - VB enumerator (For Each)                       0.14
-' VB Array - VB loop (For)                                  0.08
+' Iterable object with IEnumerator interface (For Each)     2.89 (API 16.38 ms)
+' VB Collection - VB enumerator (For Each)                  0.24
+' VB Array - VB enumerator (For Each)                       0.13
+' VB Array - VB loop (For)                                  0.07
 '
 ' The original ideas for a custom enumerator using a typelib and redefining
 ' the IEnumVARIANT interface routines in a standard module originate from
@@ -77,6 +77,9 @@ Option Explicit
 ' is to let the object export the items to an array. The latter is what is used
 ' by the VB Dictionary. Both of these alternative methods export the items
 ' "at once" whereas the Enumerate exports the enumerated items "one by one".
+'
+' Using the VarCopyToPtr API to copy a varfiant value to a variant address is
+' relatively slow. API's are best avoided in teh hot zone for raw performance.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Compiler Directives
@@ -390,8 +393,7 @@ Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr)
         Exit Function
     End If
 
-    Dim Copy As TENUM: Copy = obj
-    Set Copy.IEnum = obj.IEnum
+    Dim Copy As TENUM: Copy = obj   ' UDT assignment AddRefs IEnum — no Set needed
     Copy.nRef = 1
 
     Dim MemoryBlock As LongPtr: MemoryBlock = CoTaskMemAlloc(LenB(obj))
