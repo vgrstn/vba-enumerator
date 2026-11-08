@@ -43,24 +43,28 @@ Option Explicit
 ' E-mail: vincent@vangeerestein.com
 ' Description: Interface definition for the Enumerator Module
 ' Add-in: RubberDuck (https://rubberduckvba.com/)
-' Version: 2024.08.15
+' Version: 2026.11.08
 '
 ' Methods
-' object.First          Returns the index of the first item
-' object.Last           Returns the index of the last item
+' object.First          Returns the index of the first item, Null if empty
+' object.Last           Returns the index of the last item, Null if empty
 ' object.Item(index)    Returns an item by its index
+'
+' First and Last can be in ascending or descending order and both belong to
+' the enumeration, so First = Last is one item. An empty object returns Null
+' for both First and Last.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Interface methods
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-Public Function First() As Long
-Attribute First.VB_Description = "Returns the index of the first item."
+Public Function First() As Variant
+Attribute First.VB_Description = "Returns the index of the first item, Null if empty."
 End Function
 
 
-Public Function Last() As Long
-Attribute Last.VB_Description = "Returns the index of the last item."
+Public Function Last() As Variant
+Attribute Last.VB_Description = "Returns the index of the last item, Null if empty."
 End Function
 
 

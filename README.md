@@ -17,8 +17,11 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 - **`For Each` without a typelib** — pure VBA, no external dependencies
 - **Early binding** — items retrieved via `IEnumerator.Item(index)`, direct vtable call, no dispatch overhead
 - **Nested loops** — works correctly for nested `For Each` with mixed objects and mixed enumerators
-- **Ascending and descending** — `First` and `Last` can be in either order
+- **Ascending and descending** — `First` and `Last` can be in either order; `First = Last` is one item
+- **Empty objects** — an empty object returns `Null` for both `First` and `Last`, and the loop body never runs
+- **Errors reach the caller** — an error raised in `Item` or in the loop body propagates as usual
 - **Fast variant copy** — uses a Variant ByRef construct (~5× faster than `VariantCopy` API); switch to API mode with `#Const API = True`
+- **Reused memory blocks** — released enumerators go on a stack, so after the first `For Each` no memory is allocated
 - **Full COM lifecycle** — `QueryInterface`, `AddRef`, `Release`, `Clone` all correctly implemented
 - x86 / x64 compatible via `LongPtr` and `#If Win64`
 - Pure VBA, zero dependencies, Rubberduck-friendly annotations
@@ -32,7 +35,7 @@ Implements the full `IEnumVARIANT` interface (`Next`, `Skip`, `Reset`, `Clone`) 
 | `IEnumerator.cls` | Interface | Defines `First`, `Last`, `Item` — implement this in your iterable Class |
 | `Enumerator.bas` | Module | `Enumerate(iterable)` — the main entry point |
 | `CEnumTestEarly.cls` | Example | Simple iterable Class implementing `IEnumerator` |
-| `EnumTestEarly.bas` | Example | `For Each` tests and performance timings |
+| `EnumTestEarly.bas` | Example | `For Each` examples and performance timings |
 
 Each file has a corresponding `_WithAttributes` version (e.g. `Enumerator_WithAttributes.bas`) with [Rubberduck](https://rubberduckvba.com/) annotations removed and VB attributes baked in. Import the `_WithAttributes` files if you are not using Rubberduck.
 
@@ -46,15 +49,17 @@ Each file has a corresponding `_WithAttributes` version (e.g. `Enumerator_WithAt
 
 | Member | Description |
 |---|---|
-| `Enumerate(iterable)` | Returns a synthetic `IEnumVARIANT` for the iterable object. Raises an error if `iterable` is `Nothing` or does not implement `IEnumerator`. |
+| `Enumerate(iterable)` | Returns a synthetic `IEnumVARIANT` for the iterable object. Raises error 424 if `iterable` is `Nothing`, and error 5 if it does not implement `IEnumerator` or if only one of `First` and `Last` is `Null`. |
 
 ### `IEnumerator` interface
 
 | Method | Description |
 |---|---|
-| `First()` | Returns the index of the first item |
-| `Last()` | Returns the index of the last item |
+| `First()` | Returns the index of the first item as a `Variant`, `Null` for an empty object |
+| `Last()` | Returns the index of the last item as a `Variant`, `Null` for an empty object |
 | `Item(index)` | Returns the item at the given index |
+
+`First` and `Last` both belong to the enumeration and can be in ascending or descending order. An empty object returns `Null` for both; one `Null` without the other breaks the rules of the interface.
 
 ---
 
@@ -65,12 +70,20 @@ Each file has a corresponding `_WithAttributes` version (e.g. `Enumerator_WithAt
 ```vb
 Implements IEnumerator
 
-Private Function IEnumerator_First() As Long
-    IEnumerator_First = 1
+Private Function IEnumerator_First() As Variant
+    If this.Count = 0 Then
+        IEnumerator_First = Null
+    Else
+        IEnumerator_First = 1
+    End If
 End Function
 
-Private Function IEnumerator_Last() As Long
-    IEnumerator_Last = this.Count
+Private Function IEnumerator_Last() As Variant
+    If this.Count = 0 Then
+        IEnumerator_Last = Null
+    Else
+        IEnumerator_Last = this.Count
+    End If
 End Function
 
 Private Function IEnumerator_Item(ByVal index As Long) As Variant
@@ -108,17 +121,21 @@ Next
 
 ## ⏱️ Performance
 
-Timings for `n = 10,000` items (Immediate Window):
+Timings for `n = 10,000` items:
 
 | Method | Time (ms) |
 |---|---|
-| Custom enumerator — `For Each` (VarByRef) | 2.89 |
-| Custom enumerator — `For Each` (API) | 16.38 |
-| VB Collection — `For Each` | 0.24 |
-| VB Array — `For Each` | 0.13 |
-| VB Array — `For i` | 0.07 |
+| Custom enumerator — `For Each` (VarByRef) | 3.01 |
+| Custom enumerator — `For Each` (API) | 16.04 |
+| Iterable object — `For i`, `Item(i)` | 0.83 |
+| Iterable object — `For Each` over an `Items` array | 0.32 |
+| VB Collection — `For Each` | 0.26 |
+| VB Array — `For Each` | 0.12 |
+| VB Array — `For i` | 0.08 |
 
-The overhead versus a native VB Collection is primarily the early-bound `IEnumerator.Item(i)` vtable call per element. The VarByRef variant copy is ~5× faster than the `VariantCopy` API.
+The custom enumerator is about 10 times slower than `For Each` over a VB Collection. The VB Collection enumerator is native code, whereas here every item takes a call of `IEnumVARIANT_Next` and of the `Item` function, both VBA code: just calling `Item` already takes 3 times as long as a VB Collection step. For speed, enumerate an `Items` array instead. The value of the custom enumerator is `For Each` over your own Class without copying the items first.
+
+Starting a `For Each` takes about 4 µs (API 8 µs), against 0.2 µs for a VB Collection. It used to take 13.6 µs, before the memory blocks were reused and the pointer writes moved from `CopyMemory` to the Variant ByRef construct.
 
 ---
 
@@ -126,7 +143,7 @@ The overhead versus a native VB Collection is primarily the early-bound `IEnumer
 
 | Directive | Default | Description |
 |---|---|---|
-| `#Const API` | `False` | Copy Variants via Variant ByRef construct (fast) or `VariantCopy` API (slow) |
+| `#Const API` | `False` | Copy Variants and pointers via the Variant ByRef construct (fast) or via the `VariantCopy` and `CopyMemory` APIs (slow) |
 
 `#Const API = True` uses `VarCopyToPtr` (`VariantCopy` from oleaut32). `#Const API = False` uses the Variant ByRef construct — approximately 5× faster. See performance table above.
 
@@ -136,11 +153,11 @@ The overhead versus a native VB Collection is primarily the early-bound `IEnumer
 
 VBA's `For Each` requires the iterable object to expose `IEnumVARIANT` via `_NewEnum`. Rather than using a typelib to define `IEnumVARIANT`, this module:
 
-1. Allocates a block of heap memory (`CoTaskMemAlloc`) large enough to hold the enumerator state (`TENUM` UDT)
+1. Takes a block of heap memory, large enough to hold the enumerator state (`TENUM` UDT), from a stack of free blocks — or allocates one with `CoTaskMemAlloc` when the stack is empty
 2. Builds a vtable of function pointers (`AddressOf`) for the seven COM methods: `QueryInterface`, `AddRef`, `Release`, `Next`, `Skip`, `Reset`, `Clone`
 3. Writes the vtable pointer into the first field of `TENUM` — making it a valid COM object
 4. Overwrites the return value of `Enumerate` with the heap pointer — returning the synthetic object as `IEnumVARIANT`
-5. Keeps the iterable object alive via a `Static Collection` keyed by the heap address, compensating for reference count changes when the local `TENUM` goes out of scope
+5. Hands the reference to the iterable object over to the heap block, which keeps it alive until the enumeration is released
 
 Based on work by Dexter Freivald (32-bit, late binding) and ideas from *Hardcore Visual Basic 5.0* by Bruce McKinney.
 
@@ -162,7 +179,7 @@ Private Type TENUM
 End Type
 ```
 
-`pvTable` is first because COM requires a pointer to the vtable at offset 0 of any COM object. `IEnum As IEnumerator` is early-bound — the compiler emits a direct vtable call to `.Item(i)` rather than a late-bound `IDispatch.Invoke`, which is the dominant cost in `IEnumVARIANT_Next`. `Step` is derived from `First`/`Last` at construction time; ascending and descending enumeration share the same code paths throughout.
+`pvTable` is first because COM requires a pointer to the vtable at offset 0 of any COM object. `IEnum As IEnumerator` is early-bound — the compiler emits a direct vtable call to `.Item(i)` rather than a late-bound `IDispatch.Invoke`, which is the dominant cost in `IEnumVARIANT_Next`. `Step` is derived from `First`/`Last` at construction time; ascending and descending enumeration share the same code paths throughout. An empty object gets the empty range `First = 1`, `Last = 0`, `Step = 1`, as for an empty array.
 
 ### vtable — built once per session
 
@@ -180,29 +197,46 @@ The `Static` array persists for the lifetime of the VBA session. `vTable(0) = vb
 ### Return value trick
 
 ```vb
-CopyMemory ByVal VarPtr(Enumerate), MemoryBlock, vbSizeLongPtr
+CopyPtrByRef VarPtr(Enumerate), MemoryBlock, VarByRef.vt, VarByRef.ref
 ```
 
 `Enumerate` returns `IEnumVARIANT`. VBA stores the return value as an object pointer at `VarPtr(Enumerate)`. Overwriting those bytes with the heap block address makes VBA believe that address is a valid COM object — which it is, because the vtable pointer sits at offset 0. This is why `Enumerate` carries `'@Ignore NonReturningFunction`; the return value is set by raw memory write, not by a `Set Enumerate = ...` assignment.
 
-### `KeepAlive` — reference count management
+### Reference counting — the heap block owns the reference
 
-`CopyMemory ByVal MemoryBlock, obj, LenB(obj)` copies the `TENUM` struct to the heap as raw bytes — it copies the `IEnum` pointer without calling `AddRef`. When `obj` goes out of scope at function exit, VBA calls `Release` on `obj.IEnum`, which could destroy the iterable even though the heap block still holds a raw (untracked) copy of the pointer.
-
-`KeepAlive` compensates:
+`CopyMemory ByVal MemoryBlock, obj, LenB(obj)` copies the `TENUM` struct to the heap as raw bytes — it copies the `IEnum` pointer without calling `AddRef`. The local `obj` holds the one counted reference, taken by `Set .IEnum = iterable`. Clearing that pointer in `obj` without a `Release` hands the reference over to the heap block:
 
 ```vb
-Set KeepAlive(MemoryBlock) = obj.IEnum   ' hold one tracked reference
+CopyPtrByRef VarPtr(obj.IEnum), vbNullPtr, VarByRef.vt, VarByRef.ref
 ```
 
-A `Static Collection` inside the property holds the reference, keyed by the heap block address. When `IUnknown_Release` sees `nRef = 0`, it removes the entry and frees the block:
+When `IUnknown_Release` sees `nRef = 0`, it releases the reference held by the block and puts the block on the stack of free blocks:
 
 ```vb
-Set KeepAlive(VarPtr(obj)) = Nothing   ' release — iterable may now be destroyed
-CoTaskMemFree VarPtr(obj)              ' free heap block
+Set obj.IEnum = Nothing                ' release — iterable may now be destroyed
+FreeBlocks.Add VarPtr(obj), Before:=1  ' (or Add when the stack is empty)
 ```
 
 The same pattern applies in `IEnumVARIANT_Clone`.
+
+> Earlier versions kept the iterable object alive with a `KeepAlive` Collection keyed by the block address. Its `On Error` handling cleared the `Err` object when an enumerator was released while an error was being raised, so an error in `Item` or in the body of a `For Each` reached the caller one level up as `Err.Number = 0`. The handover above needs no error handling.
+
+### Memory blocks — a stack for reuse
+
+```vb
+Private FreeBlocks As Collection
+
+Private Function TakeBlock(ByVal NBytes As Long) As LongPtr
+    If FreeBlocks.count = 0 Then
+        TakeBlock = CoTaskMemAlloc(NBytes)
+    Else
+        TakeBlock = FreeBlocks.Item(1)
+        FreeBlocks.Remove 1
+    End If
+End Function
+```
+
+A `Declare` call takes about 1.4 µs, and `CoTaskMemAlloc` with `CoTaskMemFree` about 6 µs. Released blocks are therefore never freed but kept in a Collection used as a stack (top at position 1, no key). Only as many blocks are allocated as the most enumerations that were active at the same time — usually one or two.
 
 ### `IEnumVARIANT_Next` — hot path
 
@@ -243,7 +277,7 @@ Dim Copy As TENUM: Copy = obj
 Copy.nRef = 1
 ```
 
-`Copy = obj` copies all fields. VBA automatically calls `AddRef` on the embedded `IEnum As IEnumerator` during the UDT assignment, so `KeepAlive` has exactly the one tracked reference it needs for the clone. The clone starts at `nRef = 1` regardless of the original's count, and captures the enumeration position at the moment of cloning.
+`Copy = obj` copies all fields. VBA automatically calls `AddRef` on the embedded `IEnum As IEnumerator` during the UDT assignment, and that reference is handed over to the clone's heap block as in `Enumerate`. The clone starts at `nRef = 1` regardless of the original's count, and captures the enumeration position at the moment of cloning.
 
 ### Variant ByRef construct
 
@@ -256,6 +290,13 @@ Private VarByRef As CONSTRUCT
 ```
 
 `InitializeVarByRef` sets `vt` to `VT_INTEGER | VT_BYREF` pointing at `ref`. `CopyVarByRef` writes a Variant to any address without an API call; `CopyLngByRef` uses the same mechanism (`vbLong | VT_BYREF`) for `pceltFetched`. Both helpers receive `vt` and `ref` as `ByRef Variant` parameters rather than accessing `VarByRef` directly, avoiding a global UDT indirection per call.
+
+`CopyPtrByRef` writes a pointer the same way. On x64 a `LongLong` by reference is not supported (error 458), so the 8 bytes are written as a `Currency`, whose internal value is the Currency value times 10,000:
+
+```vb
+vt = VBA.vbCurrency Or VT_BYREF
+ref = CCur(value) * 0.0001@
+```
 
 ### GUID comparison — field-by-field
 
@@ -279,6 +320,15 @@ Direct integer comparison on the `GUID` UDT fields — no string parsing. The co
 ```
 
 A `Variant` is 16 bytes on x86 and 24 bytes on x64. All `CopyMemory` sizes and pointer arithmetic use these constants — no hard-coded values appear in the code.
+
+---
+
+## 📝 Changes
+
+**2026-11-08**
+- Fixed: errors raised in `Item` or in the body of a `For Each` were lost one level up (`Err.Number = 0`); the `KeepAlive` Collection is gone.
+- Changed: `IEnumerator.First` and `Last` return a `Variant`; `Null` for both means an empty object. Before, an empty object with `First = 1` and `Last = 0` was enumerated as two items in descending order.
+- Faster start of a `For Each` (13.6 → 4 µs): memory blocks are reused through a stack, and pointers are written with the Variant ByRef construct.
 
 ---
 

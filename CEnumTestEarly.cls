@@ -51,18 +51,26 @@ Private this As TENUMTEST
 Implements IEnumerator
 
 
-'@Description "Returns the index of the first enumerated item."
-Private Function IEnumerator_First() As Long
+'@Description "Returns the index of the first enumerated item, Null if empty."
+Private Function IEnumerator_First() As Variant
 
-    IEnumerator_First = 1
+    If this.n = 0 Then
+        IEnumerator_First = Null
+    Else
+        IEnumerator_First = 1
+    End If
 
 End Function
 
 
-'@Description "Returns the index of the last enumerated item."
-Private Function IEnumerator_Last() As Long
+'@Description "Returns the index of the last enumerated item, Null if empty."
+Private Function IEnumerator_Last() As Variant
 
-    IEnumerator_Last = this.n
+    If this.n = 0 Then
+        IEnumerator_Last = Null
+    Else
+        IEnumerator_Last = this.n
+    End If
 
 End Function
 
@@ -96,6 +104,10 @@ Public Property Get count() As Long
 End Property
 Public Property Let count(ByVal RHS As Long)
     this.n = RHS
+    If this.n = 0 Then
+        Erase this.a
+        Exit Property
+    End If
     ReDim this.a(1 To this.n)
     Dim i As Long
     For i = 1 To this.n
