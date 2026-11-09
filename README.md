@@ -331,6 +331,10 @@ A `Variant` is 16 bytes on x86 and 24 bytes on x64. All `CopyMemory` sizes and p
 
 ## 📝 Changes
 
+**2026-11-09**
+- Fixed: `CopyPtrByRef` copies the 8 bytes of a pointer as a `Currency` by changing the Variant type only. The previous `CCur(value) * 0.0001@` was exact for every user-mode address, but silently wrong above 922,337,203,685,477.
+- Module header rewritten: what the module does and needs at the top, the performance notes in one paragraph, a corrected note on the alternatives.
+
 **2026-11-08**
 - Fixed: errors raised in `Item` or in the body of a `For Each` were lost one level up (`Err.Number = 0`); the `KeepAlive` Collection is gone.
 - Changed: `IEnumerator.First` and `Last` return a `Variant`; `Null` for both means an empty object. Before, an empty object with `First = 1` and `Last = 0` was enumerated as two items in descending order.
@@ -340,4 +344,4 @@ A `Variant` is 16 bytes on x86 and 24 bytes on x64. All `CopyMemory` sizes and p
 
 ## 📄 License
 
-MIT © 2025 Vincent van Geerestein
+MIT © 2025-2026 Vincent van Geerestein

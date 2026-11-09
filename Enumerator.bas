@@ -1,12 +1,12 @@
 Attribute VB_Name = "Enumerator"
 '@IgnoreModule MultipleDeclarations, HungarianNotation, UseMeaningfulName, AssignedByValParameter, FunctionReturnValueDiscarded, UnassignedVariableUsage, VariableNotAssigned, IntegerDataType, UDTMemberNotUsed
 '@Folder("Module")
-'@ModuleDescription("Enumerator Module.")
+'@ModuleDescription("For Each enumerator for VBA objects without a typelib (early binding).")
 
 '------------------------------------------------------------------------------
 ' MIT License
 '
-' Copyright (c) 2025 Vincent van Geerestein
+' Copyright (c) 2025-2026 Vincent van Geerestein
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
 ' of this software and associated documentation files (the "Software"), to deal
@@ -35,21 +35,25 @@ Option Explicit
 
 ' Author: Vincent van Geerestein
 ' E-mail: vincent@vangeerestein.com
-' Description: Enumerator Module using Early Binding
+' Description: For Each enumerator for VBA objects using Early Binding
 ' Add-in: RubberDuck (https://rubberduckvba.com/)
-' Version: 2026.11.08
+' Version: 2026.11.09
+'
+' Enumerate gives any VBA class For Each support, without a typelib or a
+' reference, in 32-bit and 64-bit Office (VBA7). The module builds a complete
+' IEnumVARIANT object (Next, Skip, Reset and Clone) in memory and gets the
+' items one by one through the IEnumerator interface (early binding).
 '
 ' Methods
-' Enumerate(iterable)       Sets IEnumVARIANT interface to an iterable object
+' Enumerate(iterable)       Returns the IEnumVARIANT interface for an iterable
+'                           object
+'
+' Requires the IEnumerator class module defining the interface.
 '
 ' The enumeration works correctly for nested loops with mixed objects as well
 ' as for nested loops with mixed enumerators. An error raised in the Item
 ' function of the iterable object or in the body of the loop reaches the caller
 ' as usual. The iterable object stays alive until the enumeration ends.
-'
-' The iterable object needs to set its IEnumVARIANT interface by the Enumerate
-' method and is required to implement the IEnumerator interface for the early
-' binding of the method for getting an indexed item from the iterable object.
 '
 ' The indices First and Last can be in ascending or descending order and both
 ' belong to the enumeration, so First = Last is one item. An empty object
@@ -84,7 +88,7 @@ Option Explicit
 '    Set Enumerate = Enumerator.Enumerate(Me)
 ' End Function
 '
-' Timings (ms) for n = 10.000, see BenchmarkEnumerator
+' Timings (ms) for n = 10,000, see BenchmarkEnumerator
 ' Iterable object with IEnumerator interface (For Each)     3.01 (API 16.04 ms)
 ' Iterable object - Item(index) (For)                       0.83
 ' Iterable object - Items array (For Each)                  0.32
@@ -98,13 +102,18 @@ Option Explicit
 ' calling Item already takes 3 times as long as a VB Collection step. For
 ' speed, enumerate the Items array of the object instead.
 '
-' Starting a For Each takes about 4 탎 (API 8 탎), against 0.2 탎 for a VB
-' Collection. The memory blocks of the IEnumVARIANT objects are reused through
-' a stack, so a new block is only allocated when more enumerations are active
-' at the same time than ever before. The blocks are never freed.
+' No API is called per item: every Declare call takes about 1.4 탎. A Variant
+' is copied with the Variant ByRef construct (5 times faster than VarCopyToPtr)
+' and pointers are written with it too; on 64 bits a LongLong can't be written
+' by reference (error 458), so its 8 bytes are copied as a Currency. The memory
+' blocks of the IEnumVARIANT objects are reused through a stack instead of
+' allocated and freed for every enumeration (CoTaskMemAlloc and CoTaskMemFree
+' together take about 6 탎), so starting a For Each takes about 4 탎 (API 8 탎),
+' against 0.2 탎 for a VB Collection. A new block is only allocated when more
+' enumerations are active at the same time than ever before; the blocks are
+' never freed.
 '
-' The unit tests are in TestEnumEarlyBinding and the timings in
-' BenchmarkEnumerator.
+' 32 unit tests are in TestEnumEarlyBinding, the timings in BenchmarkEnumerator.
 '
 ' The original ideas for a custom enumerator using a typelib and redefining
 ' the IEnumVARIANT interface routines in a standard module originate from
@@ -114,20 +123,10 @@ Option Explicit
 ' Freivald whose original code was for 32 bits and was using late binding.
 ' https://www.vbforums.com/showthread.php?854963-VB6-IEnumVARIANT-For-Each-support-without-a-typelib
 '
-' An alternative method is to define an enumeration procedure in the iterable
-' object by copying its items to an embedded VB Collection and subsequently
-' exposing the IEnumVARIANT interface of this VB Collection. Another alternative
-' is to let the object export the items to an array. The latter is what is used
-' by the VB Dictionary. Both of these alternative methods export the items
-' "at once" whereas the Enumerate exports the enumerated items "one by one".
-'
-' Using the VarCopyToPtr API to copy a variant value to a variant address is
-' relatively slow. APIs are best avoided in the hot zone for raw performance:
-' every Declare call takes about 1.4 탎. The memory blocks are therefore reused
-' instead of allocated and freed for every enumeration (CoTaskMemAlloc and
-' CoTaskMemFree together take about 6 탎), and pointers are written with the
-' Variant ByRef construct. On 64 bits a LongLong can't be written by reference
-' (error 458), so a pointer is written as a Currency with the same 8 bytes.
+' Alternatives are to copy the items to an embedded VB Collection and expose
+' its enumerator, or to return the items as an array, as the Items and Keys of
+' a Scripting.Dictionary do. Both hand over all items at once, whereas
+' Enumerate hands them over one by one.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Compiler Directives
@@ -264,6 +263,8 @@ Public Function Enumerate(ByVal iterable As Object) As IEnumVARIANT
         ' Initialize the Variant ByRef construct.
         InitializeVarByRef
 #End If
+
+        ' Initialize the stack of blocks for TENUM.
         Set FreeBlocks = New Collection
     End If
 
@@ -301,8 +302,8 @@ Public Function Enumerate(ByVal iterable As Object) As IEnumVARIANT
     If MemoryBlock = vbNullPtr Then Err.Raise vbErrorOutOfMemory
     CopyMemory ByVal MemoryBlock, obj, LenB(obj)
 
-    ' The memory block now holds the reference to the iterable object: clear it
-    ' in obj without a release, IUnknown_Release releases it.
+    ' The memory block now holds the reference to the iterable object.
+    ' Clear it in obj without a release, IUnknown_Release releases it when done.
 #If API Then
     CopyMemory ByVal VarPtr(Enumerate), MemoryBlock, vbSizeLongPtr
     CopyMemory ByVal VarPtr(obj.IEnum), vbNullPtr, vbSizeLongPtr
@@ -493,8 +494,6 @@ Private Function IEnumVARIANT_Clone(ByRef obj As TENUM, ByVal ppEnum As LongPtr)
     CopyMemory ByVal MemoryBlock, Copy, LenB(obj)
     IEnumVARIANT_Clone = S_OK
 
-    ' The memory block now holds the reference to the iterable object: clear it
-    ' in Copy without a release, IUnknown_Release releases it.
 #If API Then
     CopyMemory ByVal ppEnum, MemoryBlock, vbSizeLongPtr
     CopyMemory ByVal VarPtr(Copy.IEnum), vbNullPtr, vbSizeLongPtr
@@ -620,8 +619,8 @@ Private Sub CopyPtrByRef( _
 
 #If Win64 Then
     ' A LongLong by reference is not supported (error 458). The 8 bytes of the
-    ' LongLong are read as a Currency by changing the type only, and that
-    ' Currency is written by reference: the bits are copied, nothing is calculated.
+    ' LongLong are read as a Currency by changing the type only, and that bit
+    ' pattern value is copied by reference, nothing is calculated.
     VarByRef.ref = value
     vt = VBA.vbCurrency
     Dim Bits As Currency: Bits = ref
