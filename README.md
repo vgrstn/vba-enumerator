@@ -291,12 +291,18 @@ Private VarByRef As CONSTRUCT
 
 `InitializeVarByRef` sets `vt` to `VT_INTEGER | VT_BYREF` pointing at `ref`. `CopyVarByRef` writes a Variant to any address without an API call; `CopyLngByRef` uses the same mechanism (`vbLong | VT_BYREF`) for `pceltFetched`. Both helpers receive `vt` and `ref` as `ByRef Variant` parameters rather than accessing `VarByRef` directly, avoiding a global UDT indirection per call.
 
-`CopyPtrByRef` writes a pointer the same way. On x64 a `LongLong` by reference is not supported (error 458), so the 8 bytes are written as a `Currency`, whose internal value is the Currency value times 10,000:
+`CopyPtrByRef` writes a pointer the same way. On x64 a `LongLong` by reference is not supported (error 458), so the 8 bytes are copied as a `Currency`:
 
 ```vb
+VarByRef.ref = value            ' the pointer as a LongLong
+vt = VBA.vbCurrency             ' the same 8 bytes, now read as a Currency
+Dim Bits As Currency: Bits = ref
+VarByRef.ref = address
 vt = VBA.vbCurrency Or VT_BYREF
-ref = CCur(value) * 0.0001@
+ref = Bits                      ' the 8 bytes written as they are
 ```
+
+Only the type is changed, so the bits are copied and nothing is calculated. (An earlier version wrote `CCur(value) * 0.0001@`; that is exact for every user-mode address, but silently wrong above 922,337,203,685,477.)
 
 ### GUID comparison — field-by-field
 

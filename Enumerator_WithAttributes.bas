@@ -612,13 +612,19 @@ Private Sub CopyPtrByRef( _
 )
 Attribute CopyPtrByRef.VB_Description = "Copies a pointer to a memory address using the Variant ByRef construct."
 
-    VarByRef.ref = address
 #If Win64 Then
-    ' A LongLong by reference is not supported (error 458): write the 8 bytes
-    ' as a Currency, whose internal value is the Currency value times 10000.
+    ' A LongLong by reference is not supported (error 458). The 8 bytes of the
+    ' LongLong are read as a Currency by changing the type only, and that
+    ' Currency is written by reference: the bits are copied, nothing is calculated.
+    VarByRef.ref = value
+    vt = VBA.vbCurrency
+    Dim Bits As Currency: Bits = ref
+
+    VarByRef.ref = address
     vt = VBA.vbCurrency Or VT_BYREF
-    ref = CCur(value) * 0.0001@
+    ref = Bits
 #Else
+    VarByRef.ref = address
     vt = VBA.vbLong Or VT_BYREF
     ref = value
 #End If
